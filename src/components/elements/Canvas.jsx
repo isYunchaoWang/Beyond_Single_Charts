@@ -17,6 +17,14 @@ import ReactECharts from 'echarts-for-react';
 // 自定义图表节点组件
 const ChartNode = ({ data, id }) => {
   const { message } = App.useApp();
+  const nodeRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (nodeRef.current && typeof data.onUpdateSize === 'function') {
+      const height = nodeRef.current.offsetHeight;
+      data.onUpdateSize(id, height);
+    }
+  });
   
   const handleDelete = () => {
     data.onDelete(id);
@@ -66,6 +74,7 @@ const ChartNode = ({ data, id }) => {
   if (data.isCombined && data.combinedCharts) {
     return (
       <Card
+        ref={nodeRef}
         size="small"
         title={data.title || '组合图表'}
         extra={
@@ -115,6 +124,7 @@ const ChartNode = ({ data, id }) => {
   // 单个图表渲染
   return (
     <Card
+      ref={nodeRef}
       size="small"
       title={data.title || '图表'}
       extra={
@@ -179,20 +189,36 @@ const Canvas = () => {
     };
   }, []);
 
+  // 节点尺寸更新
+  const handleUpdateNodeSize = useCallback((id, height) => {
+    setNodes((nds) => nds.map(node =>
+      node.id === id ? { ...node, data: { ...node.data, realHeight: height } } : node
+    ));
+  }, [setNodes]);
+
   // 检测碰撞
   const detectCollision = useCallback((node1, node2) => {
     const margin = 100; // 增加碰撞检测的容差
     
     // 根据节点类型和状态计算实际尺寸
     const getNodeSize = (node) => {
-      if (node.data.isCombined) {
-        return { width: 300, height: 300 }; // 组合图表尺寸
+      if (typeof node.data.realHeight === 'number') {
+        return { width: node.data.isCombined ? 300 : 250, height: node.data.realHeight };
+      }
+      if (node.data.isCombined && node.data.combinedCharts) {
+        // 组合节点高度 = 标题区40 + 每个子图表(80+16) + 底部padding16
+        const chartCount = node.data.combinedCharts.length;
+        return { width: 300, height: 40 + chartCount * 96 + 16 };
       }
       return { width: 250, height: 200 }; // 单个图表尺寸
     };
     
     const node1Size = getNodeSize(node1);
     const node2Size = getNodeSize(node2);
+
+    // 调试输出节点尺寸和位置
+    console.log('[碰撞调试] node1:', node1.id, node1.position, node1Size);
+    console.log('[碰撞调试] node2:', node2.id, node2.position, node2Size);
     
     const collision = (
       node1.position.x < node2.position.x + node2Size.width + margin &&
@@ -347,6 +373,15 @@ const Canvas = () => {
     [setEdges]
   );
 
+  // 渲染节点时注入 onUpdateSize
+  const nodesWithUpdateSize = nodes.map(node => ({
+    ...node,
+    data: {
+      ...node.data,
+      onUpdateSize: handleUpdateNodeSize
+    }
+  }));
+
   return (
     <div
       ref={reactFlowWrapper}
@@ -357,7 +392,7 @@ const Canvas = () => {
       }}
     >
       <ReactFlow
-        nodes={nodes}
+        nodes={nodesWithUpdateSize}
         edges={edges}
         onNodesChange={(changes) => setNodes((nds) => applyNodeChanges(changes, nds))}
         onEdgesChange={onEdgesChange}
@@ -373,50 +408,24 @@ const Canvas = () => {
         }}
         onNodeDragStart={(event, node) => {
           console.log('ReactFlow onNodeDragStart:', node.id);
-          setDraggedNodeId(node.id);
         }}
         onNodeDrag={(event, node) => {
-          // 在拖拽过程中实时检测碰撞
-          if (draggedNodeId && draggedNodeId !== node.id) {
-            const draggedNode = nodes.find(n => n.id === draggedNodeId);
-            if (draggedNode) {
-              // 检查与当前拖拽节点的碰撞
-              if (detectCollision(draggedNode, node)) {
-                console.log('拖拽过程中检测到碰撞:', draggedNode.id, node.id);
-                // 可以在这里添加视觉反馈，比如高亮目标节点
-              }
-            }
-          }
+          // 可选：拖拽过程中实时检测碰撞并高亮（如需视觉反馈可补充）
         }}
         onNodeDragStop={(event, node) => {
           console.log('ReactFlow onNodeDragStop:', node.id);
           console.log('当前所有节点:', nodes.map(n => ({ id: n.id, position: n.position })));
-          
-          // 检查与所有其他节点的碰撞
-          if (draggedNodeId && draggedNodeId !== node.id) {
-            const draggedNode = nodes.find(n => n.id === draggedNodeId);
-            
-            if (draggedNode) {
-              console.log('检查与所有节点的碰撞，源节点:', draggedNode.id);
-              
-              // 遍历所有其他节点
-              for (const targetNode of nodes) {
-                if (targetNode.id !== draggedNodeId && targetNode.id !== node.id) {
-                  console.log('检查目标节点:', targetNode.id);
-                  
-                  if (detectCollision(draggedNode, targetNode)) {
-                    console.log('检测到碰撞，开始组合:', draggedNode.id, targetNode.id);
-                    combineCharts(draggedNode, targetNode);
-                    setDraggedNodeId(null);
-                    return; // 找到第一个碰撞就组合
-                  }
-                }
+          // 拖拽结束时，检测与所有其他节点的碰撞
+          for (const targetNode of nodes) {
+            if (targetNode.id !== node.id) {
+              if (detectCollision(node, targetNode)) {
+                console.log('检测到碰撞，开始组合:', node.id, targetNode.id);
+                combineCharts(node, targetNode);
+                return; // 找到第一个碰撞就组合
               }
-              
-              console.log('没有检测到任何碰撞');
             }
           }
-          setDraggedNodeId(null);
+          console.log('没有检测到任何碰撞');
         }}
       >
         <Controls />
