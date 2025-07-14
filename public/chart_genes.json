@@ -1,0 +1,168 @@
+[
+  {
+    "chart": "bar",
+    "genes": {
+      "Mark": "bar",
+      "Coord": "cartesian",
+      "Stat": "identity",
+      "Encode": {
+        "x": "cat",
+        "y": "value"
+      },
+      "Order": "none"
+    }
+  },
+  {
+    "chart": "stacked_bar",
+    "genes": {
+      "Mark": "bar",
+      "Coord": "cartesian",
+      "Stat": "stack",
+      "Encode": {
+        "x": "cat",
+        "y": "value",
+        "color": "group"
+      },
+      "Order": "none"
+    }
+  },
+  {
+    "chart": "line",
+    "genes": {
+      "Mark": "line",
+      "Coord": "cartesian",
+      "Stat": "identity",
+      "Encode": {
+        "x": "time",
+        "y": "value",
+        "color": "group"
+      },
+      "Order": "none"
+    }
+  },
+  {
+    "chart": "area",
+    "genes": {
+      "Mark": "area",
+      "Coord": "cartesian",
+      "Stat": "identity",
+      "Encode": {
+        "x": "time",
+        "y": "value",
+        "color": "group"
+      },
+      "Order": "none"
+    }
+  },
+  {
+    "chart": "scatter",
+    "genes": {
+      "Mark": "point",
+      "Coord": "cartesian",
+      "Stat": "identity",
+      "Encode": {
+        "x": "x",
+        "y": "y",
+        "color": "group",
+        "size": "value"
+      },
+      "Order": "none"
+    }
+  },
+  {
+    "chart": "pie",
+    "genes": {
+      "Mark": "arc",
+      "Coord": "polar",
+      "Stat": "stack",
+      "Encode": {
+        "theta": "value",
+        "color": "cat"
+      },
+      "Order": "none"
+    }
+  },
+  {
+    "chart": "donut",
+    "genes": {
+      "Mark": "arc",
+      "Coord": "polar",
+      "Stat": "stack",
+      "Encode": {
+        "theta": "value",
+        "color": "cat"
+      },
+      "Order": "none"
+    }
+  },
+  {
+    "chart": "rose",
+    "genes": {
+      "Mark": "bar",
+      "Coord": "polar",
+      "Stat": "identity",
+      "Encode": {
+        "theta": "cat",
+        "radius": "value",
+        "color": "cat"
+      },
+      "Order": "ascending"
+    }
+  },
+  {
+    "chart": "radar",
+    "genes": {
+      "Mark": "line",
+      "Coord": "radar",
+      "Stat": "identity",
+      "Encode": {
+        "theta": "cat",
+        "radius": "value",
+        "color": "group"
+      },
+      "Order": "fixed"
+    }
+  },
+  {
+    "chart": "boxplot",
+    "genes": {
+      "Mark": "box",
+      "Coord": "cartesian",
+      "Stat": "boxplot",
+      "Encode": {
+        "x": "cat",
+        "y": "value"
+      },
+      "Order": "none"
+    }
+  },
+  {
+    "chart": "heatmap",
+    "genes": {
+      "Mark": "rect",
+      "Coord": "cartesian",
+      "Stat": "identity",
+      "Encode": {
+        "x": "cat1",
+        "y": "cat2",
+        "color": "value"
+      },
+      "Order": "none"
+    }
+  },
+  {
+    "chart": "sankey",
+    "genes": {
+      "Mark": "link",
+      "Coord": "flow",
+      "Stat": "sankey",
+      "Encode": {
+        "source": "node1",
+        "target": "node2",
+        "width": "value",
+        "color": "group"
+      },
+      "Order": "none"
+    }
+  }
+]
