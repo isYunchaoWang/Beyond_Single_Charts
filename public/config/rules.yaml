@@ -1,0 +1,156 @@
+- id: bar_to_rose
+  if:
+    src:
+      Coord: polar
+    tgt:
+      Mark: bar
+  then:
+    chart: rose
+    genes:
+      Mark: bar
+      Coord: polar
+      Stat: identity
+      Encode:
+        theta: cat
+        radius: value
+        color: cat
+      Order: ascending
+    score: 0.95
+    explanation: 条形图套用极坐标，得到南丁格尔玫瑰图
+- id: barstack_to_radial_stacked_bar
+  if:
+    src:
+      Coord: polar
+      Stat: stack
+    tgt:
+      Mark: bar
+      Stat: stack
+  then:
+    chart: radial_stacked_bar
+    genes:
+      Mark: bar
+      Coord: polar
+      Stat: stack
+      Encode:
+        theta: cat
+        radius: value
+        color: group
+      Order: none
+    score: 0.9
+    explanation: 堆叠条形图置于极坐标，形成径向堆叠条形图
+- id: arc_to_stacked_bar
+  if:
+    src:
+      Mark: arc
+      Coord: polar
+    tgt:
+      Mark: bar
+      Coord: cartesian
+  then:
+    chart: stacked_bar
+    genes:
+      Mark: bar
+      Coord: cartesian
+      Stat: stack
+      Encode:
+        x: cat
+        y: value
+        color: cat
+      Order: none
+    score: 0.85
+    explanation: 把饼图转换到笛卡尔坐标 → 堆叠条形图
+- id: line_to_area
+  if:
+    src:
+      Mark: line
+    tgt:
+      Mark: line
+      Stat: identity
+  then:
+    chart: area
+    genes:
+      Mark: area
+      Coord: cartesian
+      Stat: identity
+      Encode:
+        x: time
+        y: value
+        color: group
+      Order: none
+    score: 0.88
+    explanation: 折线图叠加填充 → 面积图
+- id: line_to_radar
+  if:
+    src:
+      Coord: radar
+    tgt:
+      Mark: line
+  then:
+    chart: radar
+    genes:
+      Mark: line
+      Coord: radar
+      Stat: identity
+      Encode:
+        theta: cat
+        radius: value
+        color: group
+      Order: fixed
+    score: 0.87
+    explanation: 折线图切换至雷达坐标 → 雷达图
+- id: scatter_dense_to_heatmap
+  if:
+    src:
+      Mark: point
+    density: high
+  then:
+    chart: heatmap
+    genes:
+      Mark: rect
+      Coord: cartesian
+      Stat: identity
+      Encode:
+        x: x
+        y: y
+        color: density
+      Order: none
+    score: 0.83
+    explanation: 散点过密 → 热力图以提升可读性
+- id: boxplot_to_violin
+  if:
+    src:
+      Mark: box
+    tgt:
+      Mark: box
+  then:
+    chart: violin
+    genes:
+      Mark: area
+      Coord: cartesian
+      Stat: density
+      Encode:
+        x: cat
+        y: value
+        color: cat
+      Order: none
+    score: 0.8
+    explanation: 箱线图转换为密度区域 → 小提琴图
+- id: rose_to_donut
+  if:
+    src:
+      Mark: bar
+      Coord: polar
+    tgt:
+      Mark: arc
+  then:
+    chart: donut
+    genes:
+      Mark: arc
+      Coord: polar
+      Stat: stack
+      Encode:
+        theta: value
+        color: cat
+      Order: none
+    score: 0.75
+    explanation: 将玫瑰条形转换为弧形扇区 → 环形图

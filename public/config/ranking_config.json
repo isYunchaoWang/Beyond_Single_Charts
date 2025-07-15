@@ -1,0 +1,27 @@
+{
+  "weights": {
+    "rule_score": 0.6,
+    "readability": 0.2,
+    "popularity": 0.1,
+    "novelty": 0.05,
+    "user_preference": 0.05
+  },
+  "readability_matrix": {
+    "bar_cartesian": 0.9,
+    "bar_polar": 0.8,
+    "arc_cartesian": 0.1,
+    "arc_polar": 0.85,
+    "line_cartesian": 0.9,
+    "line_radar": 0.7,
+    "rect_cartesian": 0.85
+  },
+  "novelty_boost": 0.1,
+  "thresholds": {
+    "min_total_score": 0.5
+  },
+  "tie_breaker_priority": [
+    "readability",
+    "novelty",
+    "popularity"
+  ]
+}
