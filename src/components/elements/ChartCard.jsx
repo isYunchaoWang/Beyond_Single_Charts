@@ -113,8 +113,7 @@ const ChartCard = ({
       chartData: chartData || getDefaultChartData(chartType),
       chartOptions: chartOptions || getChartOptions()
     };
-    
-    console.log('开始拖拽图表:', dragData);
+    console.log('ChartCard setData:', JSON.stringify(dragData));
     e.dataTransfer.setData('application/json', JSON.stringify(dragData));
     e.dataTransfer.effectAllowed = 'copy';
     

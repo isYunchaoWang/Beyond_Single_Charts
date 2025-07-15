@@ -52,10 +52,12 @@ const ChartGallery = ({ isCollapsed }) => {
         const option = genesToOption(item.chart, item.genes, data);
         // 拖拽事件处理
         const handleDragStart = (e) => {
-          e.dataTransfer.setData('application/json', JSON.stringify({
+          const dragObj = {
             chart: item.chart,
             genes: item.genes
-          }));
+          };
+          console.log('ChartGallery setData:', JSON.stringify(dragObj));
+          e.dataTransfer.setData('application/json', JSON.stringify(dragObj));
         };
         const chartName = chartNameMap[item.chart] || item.chart;
         const chartDesc = chartDescMap[item.chart] || '';

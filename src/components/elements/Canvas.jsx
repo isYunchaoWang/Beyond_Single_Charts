@@ -8,6 +8,7 @@ import ReactFlow, {
   MiniMap,
   applyEdgeChanges,
   applyNodeChanges,
+  useReactFlow,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Card, Button, App } from 'antd';
@@ -20,6 +21,7 @@ import '@reactflow/node-resizer/dist/style.css';
 import useRules from '../../utils/useRules';
 import { findMatchingRule } from '../../utils/ruleMatcher';
 import { Modal } from 'antd';
+import ChartFlowNode from './ChartFlowNode';
 
 const chartNameMap = {
   bar: '柱状图',
@@ -264,7 +266,7 @@ const ChartNode = ({ data, id, width, height, selected }) => {
 
 // 节点类型配置
 const nodeTypes = {
-  chartNode: ChartNode,
+  chartNode: ChartFlowNode,
 };
 
 const Canvas = () => {
@@ -272,7 +274,6 @@ const Canvas = () => {
   const [nodes, setNodes] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const reactFlowWrapper = useRef(null);
-  const [reactFlowInstance, setReactFlowInstance] = useState(null);
   const [draggedNodeId, setDraggedNodeId] = useState(null);
   // 新增：存储组合节点和推荐节点的 DOM ref
   const nodeDomRefs = useRef({});
@@ -283,8 +284,18 @@ const Canvas = () => {
   const [pendingCombine, setPendingCombine] = useState(null); // 记录待合并节点
   // 新增：临时存储待添加的 edge 信息
   const pendingEdgeRef = useRef(null);
+  // 移除 useReactFlow 相关内容
+  const [rfTransform, setRfTransform] = useState({ x: 0, y: 0, zoom: 1 });
+  const reactFlowInstanceRef = useRef(null);
+  useEffect(() => {
+    // 获取画布 transform
+    if (reactFlowWrapper.current && reactFlowWrapper.current.getViewport) {
+      const { x, y, zoom } = reactFlowWrapper.current.getViewport();
+      setRfTransform({ x, y, zoom });
+    }
+  }, []);
 
-  // 监听节点变化，动态计算连线
+  // 监听节点变化和画布变换，动态计算连线
   useEffect(() => {
     // 找到组合节点和推荐节点
     const combinedNode = nodes.find(n => n.data && n.data.isCombined);
@@ -301,19 +312,34 @@ const Canvas = () => {
       setCustomLine(null);
       return;
     }
-    // 计算中心点（相对于 wrapper）
+    // 计算中心点和宽高（相对于 wrapper）
     const wrapperRect = wrapperDom.getBoundingClientRect();
-    const getCenter = (dom) => {
+    const getRect = (dom) => {
       const rect = dom.getBoundingClientRect();
       return {
-        x: rect.left + rect.width / 2 - wrapperRect.left,
-        y: rect.top + rect.height / 2 - wrapperRect.top,
+        x: rect.left - wrapperRect.left,
+        y: rect.top - wrapperRect.top,
+        width: rect.width,
+        height: rect.height,
       };
     };
-    const p1 = getCenter(combinedDom);
-    const p2 = getCenter(recommendDom);
+    const rect1 = getRect(combinedDom);
+    const rect2 = getRect(recommendDom);
+    const center1 = { x: rect1.x + rect1.width / 2, y: rect1.y + rect1.height / 2 };
+    const center2 = { x: rect2.x + rect2.width / 2, y: rect2.y + rect2.height / 2 };
+    // 计算边缘交点
+    function getEdgePoint(x1, y1, w1, h1, x2, y2) {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const angle = Math.atan2(dy, dx);
+      const rx = (w1 / 2) * Math.cos(angle);
+      const ry = (h1 / 2) * Math.sin(angle);
+      return { x: x1 + rx, y: y1 + ry };
+    }
+    const p1 = getEdgePoint(center1.x, center1.y, rect1.width, rect1.height, center2.x, center2.y);
+    const p2 = getEdgePoint(center2.x, center2.y, rect2.width, rect2.height, center1.x, center1.y);
     setCustomLine({ x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y });
-  }, [nodes]);
+  }, [nodes, rfTransform]);
 
   // useEffect 监听 nodes，等节点渲染后再 setEdges
   useEffect(() => {
@@ -526,52 +552,96 @@ const Canvas = () => {
     (event) => {
       event.preventDefault();
 
-      if (!reactFlowInstance) return;
+      if (!reactFlowWrapper.current) return;
 
       const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
       const chartData = event.dataTransfer.getData('application/json');
-      
+      console.log('onDrop chartData:', chartData);
+      // 调试打印拖拽数据
+      // console.log('chartData:', chartData);
       if (chartData) {
         try {
           const parsedData = JSON.parse(chartData);
-          // console.log('接收到的图表数据:', parsedData);
-          // 生成mock数据和option
-          const data = mockDataGenerator(parsedData.chart, parsedData.genes);
-          const option = genesToOption(parsedData.chart, parsedData.genes, data);
-          
-          const position = reactFlowInstance.project({
-            x: event.clientX - reactFlowBounds.left,
-            y: event.clientY - reactFlowBounds.top,
-          });
-          
-          const newNode = {
-            id: `chart-${Date.now()}-${Math.random()}`,
-            type: 'chartNode',
-            position,
-            draggable: true, // 确保节点可拖拽
-            width: 250,
-            height: 200,
-            data: {
-              ...parsedData,
-              chartType: parsedData.chart, // 补充chartType字段
-              chartOptions: option, // 关键：加上 option
-              width: 250,
-              height: 200,
-              onDelete: handleDeleteNode,
-              onEdit: handleEditNode,
-            },
-          };
-          
-          // console.log('创建新节点:', newNode);
-          setNodes((nds) => nds.concat(newNode));
-          message.success('图表已添加到画布！');
+          console.log('onDrop parsedData:', parsedData);
+          // 兼容 ChartGallery 拖拽
+          if (parsedData.chart && parsedData.genes) {
+            let data, option, position, newNode;
+            try {
+              data = mockDataGenerator(parsedData.chart, parsedData.genes);
+              console.log('mockDataGenerator result:', data);
+              option = genesToOption(parsedData.chart, parsedData.genes, data);
+              console.log('genesToOption result:', option);
+              if (!reactFlowInstanceRef.current) throw new Error('React Flow 实例未初始化');
+              position = reactFlowInstanceRef.current.project({
+                x: event.clientX - reactFlowBounds.left,
+                y: event.clientY - reactFlowBounds.top,
+              });
+              console.log('calculated position:', position);
+              newNode = {
+                id: `chart-${Date.now()}-${Math.random()}`,
+                type: 'chartNode',
+                position,
+                draggable: true,
+                width: 250,
+                height: 200,
+                data: {
+                  ...parsedData,
+                  chartType: parsedData.chart,
+                  chartOptions: option,
+                  width: 250,
+                  height: 200,
+                  onDelete: handleDeleteNode,
+                  onEdit: handleEditNode,
+                },
+              };
+              console.log('newNode:', newNode);
+              setNodes((nds) => nds.concat(newNode));
+              message.success('图表已添加到画布！');
+            } catch (err) {
+              console.error('onDrop 生成节点出错:', err);
+              message.error('拖拽数据生成节点出错');
+            }
+          }
+          // 兼容 ChartCard 拖拽
+          else if (parsedData.type === 'chart' && parsedData.chartType) {
+            try {
+              if (!reactFlowInstanceRef.current) throw new Error('React Flow 实例未初始化');
+              const position = reactFlowInstanceRef.current.project({
+                x: event.clientX - reactFlowBounds.left,
+                y: event.clientY - reactFlowBounds.top,
+              });
+              const newNode = {
+                id: `chart-${Date.now()}-${Math.random()}`,
+                type: 'chartNode',
+                position,
+                draggable: true,
+                width: 250,
+                height: 200,
+                data: {
+                  ...parsedData,
+                  width: 250,
+                  height: 200,
+                  onDelete: handleDeleteNode,
+                  onEdit: handleEditNode,
+                },
+              };
+              console.log('newNode:', newNode);
+              setNodes((nds) => nds.concat(newNode));
+              message.success('图表已添加到画布！');
+            } catch (err) {
+              console.error('onDrop 生成节点出错:', err);
+              message.error('拖拽数据生成节点出错');
+            }
+          } else {
+            message.error('拖拽数据格式不支持');
+          }
         } catch (error) {
-          // console.error('解析拖拽数据失败:', error);
+          console.error('onDrop 解析或添加节点出错:', error);
           message.error('拖拽数据格式错误');
         }
       }
     },
-    [reactFlowInstance, setNodes, handleDeleteNode, handleEditNode, message]
+    [setNodes, handleDeleteNode, handleEditNode, message]
   );
 
   // 处理拖拽悬停
@@ -615,9 +685,13 @@ const Canvas = () => {
         position: 'relative',
       }}
     >
-      {/* 自定义 SVG 连线 */}
+      {/* 自定义 SVG 连线，应用 transform */}
       {customLine && (
-        <svg style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10 }}>
+        <svg
+          style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10 }}
+          width="100%" height="100%"
+          transform={`translate(${rfTransform.x ?? 0},${rfTransform.y ?? 0}) scale(${rfTransform.zoom ?? 1})`}
+        >
           <line x1={customLine.x1} y1={customLine.y1} x2={customLine.x2} y2={customLine.y2} stroke="#1890ff" strokeWidth={2} markerEnd="url(#arrowhead)" />
           <defs>
             <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth">
@@ -632,7 +706,6 @@ const Canvas = () => {
         onNodesChange={(changes) => setNodes((nds) => applyNodeChanges(changes, nds))}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        onInit={setReactFlowInstance}
         onDrop={onDrop}
         onDragOver={onDragOver}
         nodeTypes={nodeTypes}
@@ -651,13 +724,13 @@ const Canvas = () => {
           for (const targetNode of nodes) {
             if (targetNode.id !== node.id) {
               if (detectCollision(node, targetNode)) {
-                // 仅支持单图表节点合并
+                // 移除自定义 SVG 连线渲染
                 if (!node.data.isCombined && !targetNode.data.isCombined) {
                   // 1. 生成唯一 id
                   const combinedNodeId = `combined-${Date.now()}-${Math.random()}`;
                   const recommendNodeId = `recommend-${Date.now()}-${Math.random()}`;
                   const combinedNodeWidth = 300;
-                  // 2. 生成组合节点（parent）
+                  // 2. 生成组合节点（独立节点）
                   const sourceChart = {
                     title: node.data.title || '源图表',
                     option: node.data.chartOptions || node.data.chartData || {},
@@ -671,7 +744,7 @@ const Canvas = () => {
                   const combinedNode = {
                     id: combinedNodeId,
                     type: 'chartNode',
-                    position: targetNode.position, // 使用目标图表的位置
+                    position: { x: 100, y: 100 },
                     width: combinedNodeWidth,
                     height: 260,
                     style: { zIndex: 1 },
@@ -685,7 +758,7 @@ const Canvas = () => {
                       onEdit: handleEditNode,
                     },
                   };
-                  // 3. 生成推荐节点（child，parentNode=组合节点id，position相对父节点）
+                  // 3. 生成推荐节点（独立节点，绝对定位）
                   const rule = findMatchingRule(
                     rules,
                     node.data.genes || {},
@@ -702,8 +775,7 @@ const Canvas = () => {
                     recommendNode = {
                       id: recommendNodeId,
                       type: 'chartNode',
-                      parentNode: combinedNodeId,
-                      position: { x: combinedNodeWidth, y: 0 },
+                      position: { x: 600, y: 100 },
                       width: 250,
                       height: 200,
                       style: { zIndex: 2 },
@@ -724,8 +796,7 @@ const Canvas = () => {
                     recommendNode = {
                       id: recommendNodeId,
                       type: 'chartNode',
-                      parentNode: combinedNodeId,
-                      position: { x: combinedNodeWidth, y: 0 },
+                      position: { x: 600, y: 100 },
                       width: 250,
                       height: 120,
                       style: { zIndex: 2 },
@@ -744,11 +815,19 @@ const Canvas = () => {
                       },
                     };
                   }
-                  // 4. 只 setNodes，不 setEdges
+                  // 4. 添加原生 edge
+                  const newEdge = {
+                    id: `edge-${combinedNodeId}-${recommendNodeId}`,
+                    source: combinedNodeId,
+                    target: recommendNodeId,
+                    type: 'straight',
+                  };
+                  // 5. 更新 nodes 和 edges
                   setNodes((nds) => {
                     const filtered = nds.filter(n => n.id !== node.id && n.id !== targetNode.id);
                     return [...filtered, combinedNode, recommendNode];
                   });
+                  setEdges((eds) => [...eds, newEdge]);
                   return;
                 } else {
                 combineCharts(node, targetNode);
@@ -758,6 +837,12 @@ const Canvas = () => {
             }
           }
         }}
+        onMove={(_, transform) => {
+          if (Array.isArray(transform) && transform.length === 3) {
+            setRfTransform({ x: transform[0], y: transform[1], zoom: transform[2] });
+          }
+        }}
+        onInit={instance => { reactFlowInstanceRef.current = instance; }}
       >
         <Controls />
         <Background color="#aaa" gap={16} />
