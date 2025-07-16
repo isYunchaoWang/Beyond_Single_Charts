@@ -295,6 +295,49 @@ const Canvas = () => {
     }
   }, []);
 
+  // 拖动相关：记录拖动前的节点初始位置
+  const dragStartPositions = useRef({});
+
+  // 记录拖动开始时所有节点的位置
+  const onNodeDragStart = useCallback((event, node) => {
+    // 只记录一次
+    dragStartPositions.current = {};
+    setNodes((nds) => {
+      nds.forEach(n => {
+        dragStartPositions.current[n.id] = { ...n.position };
+      });
+      return nds;
+    });
+  }, [setNodes]);
+
+  // 拖动过程中同步推荐节点
+  const onNodeDrag = useCallback((event, node) => {
+    if (!node.data.isCombined) return;
+    const startPos = dragStartPositions.current[node.id];
+    if (!startPos) return;
+    const dx = node.position.x - startPos.x;
+    const dy = node.position.y - startPos.y;
+    if (dx === 0 && dy === 0) return;
+    setNodes((nds) => {
+      // 找到所有与该组合节点相连的推荐节点
+      const childIds = edges.filter(e => e.source === node.id).map(e => e.target);
+      return nds.map(n => {
+        if (childIds.includes(n.id)) {
+          const childStart = dragStartPositions.current[n.id];
+          if (!childStart) return n;
+          return {
+            ...n,
+            position: {
+              x: childStart.x + dx,
+              y: childStart.y + dy,
+            }
+          };
+        }
+        return n;
+      });
+    });
+  }, [edges, setNodes]);
+
   // 监听节点变化和画布变换，动态计算连线
   useEffect(() => {
     // 找到组合节点和推荐节点
@@ -704,26 +747,57 @@ const Canvas = () => {
         onConnect={onConnect}
         onDrop={onDrop}
         onDragOver={onDragOver}
+        onNodeDragStart={onNodeDragStart}
+        onNodeDrag={onNodeDrag}
         nodeTypes={nodeTypes}
         fitView
         attributionPosition="bottom-left"
         style={{
           backgroundColor: '#f5f5f5',
         }}
-        onNodeDragStart={(event, node) => {
-          // console.log('ReactFlow onNodeDragStart:', node.id);
-        }}
-        onNodeDrag={(event, node) => {
-          // 可选：拖拽过程中实时检测碰撞并高亮（如需视觉反馈可补充）
-        }}
+        // onNodeDragStart={(event, node) => {
+        //   // console.log('ReactFlow onNodeDragStart:', node.id);
+        // }}
+        // onNodeDrag={(event, node) => {
+        //   // 可选：拖拽过程中实时检测碰撞并高亮（如需视觉反馈可补充）
+        // }}
         onNodeDragStop={(event, node) => {
-          // 只对普通节点（!isCombined && !parentNode）做组合检测
-          if (node.data.isCombined || node.parentNode) return;
+          // 只对普通节点（!isCombined，id不以'recommend-'开头）做组合检测，推荐节点不能参与组合
+          if (node.data.isCombined || node.id.startsWith('recommend-')) {
+            // 拖动结束后，若是组合节点，则同步更新所有子节点位置
+            if (node.data.isCombined) {
+              const startPos = dragStartPositions.current[node.id];
+              if (!startPos) return;
+              const dx = node.position.x - startPos.x;
+              const dy = node.position.y - startPos.y;
+              if (dx === 0 && dy === 0) return;
+              setNodes((nds) => {
+                // 找到所有与该组合节点相连的推荐节点
+                const childIds = edges.filter(e => e.source === node.id).map(e => e.target);
+                return nds.map(n => {
+                  if (childIds.includes(n.id)) {
+                    const childStart = dragStartPositions.current[n.id];
+                    if (!childStart) return n;
+                    return {
+                      ...n,
+                      position: {
+                        x: childStart.x + dx,
+                        y: childStart.y + dy,
+                      }
+                    };
+                  }
+                  return n;
+                });
+              });
+            }
+            return;
+          }
           for (const targetNode of nodes) {
             if (
               targetNode.id !== node.id &&
               !targetNode.data.isCombined &&
-              !targetNode.parentNode &&
+              !targetNode.id.startsWith('recommend-') &&
+              !node.id.startsWith('recommend-') &&
               detectCollision(node, targetNode)
             ) {
               // 组合逻辑（原有代码）
@@ -799,7 +873,8 @@ const Canvas = () => {
                     id: `edge-${combinedNodeId}-${recommendNodeId}`,
                     source: combinedNodeId,
                     target: recommendNodeId,
-                    type: 'straight',
+                    type: 'bezier',
+                    markerEnd: { type: 'arrowclosed', color: '#000', width: 24, height: 24 },
                   });
                   yOffset += 220;
                 }
@@ -834,7 +909,8 @@ const Canvas = () => {
                   id: `edge-${combinedNodeId}-${recommendNodeId}`,
                   source: combinedNodeId,
                   target: recommendNodeId,
-                  type: 'straight',
+                  type: 'bezier',
+                  markerEnd: { type: 'arrowclosed', color: '#000', width: 24, height: 24 },
                 });
               }
               setNodes((nds) => {

@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Layout } from 'antd';
 import 'antd/dist/reset.css'; // 引入 antd 样式
 import ChartCardContainer from '../elements/ChartCardContainer';
-import Canvas from '../elements/Canvas';
+import RecommendCanvas from '../elements/RecommendCanvas';
+import CompareArea from '../elements/CompareArea';
 
 const { Sider, Content } = Layout;
 
@@ -15,7 +16,7 @@ const Container = () => {
   // 状态管理：控制侧边栏是否收起
   const [collapsed, setCollapsed] = useState(false);
 
-  console.log('Container 组件已渲染，侧边栏状态:', collapsed ? '收起' : '展开');
+  // console.log('Container 组件已渲染，侧边栏状态:', collapsed ? '收起' : '展开');
 
   return (
     <Layout style={{ height: '100vh', display: 'flex' }}>
@@ -48,7 +49,16 @@ const Container = () => {
           flex: 1
         }}
       >
-        <Canvas />
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          {/* CompareArea 用自适应高度 */}
+          <div style={{ flex: 'none', minHeight: 0 }}>
+            <CompareArea />
+          </div>
+          {/* RecommendCanvas 占据剩余空间 */}
+          <div style={{ flex: 1, minHeight: 0, height: 0 }}>
+            <RecommendCanvas />
+          </div>
+        </div>
       </Content>
     </Layout>
   );

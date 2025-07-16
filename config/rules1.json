@@ -1,0 +1,12 @@
+[
+  {
+    "id": "bar_to_rose",
+    "if": {
+      "chart": ["bar", "pie"]
+    },
+    "then": {
+      "chart": "rose",
+      "explanation": "条形图和饼图组合推荐南丁格尔图"
+    }
+  }
+] 
