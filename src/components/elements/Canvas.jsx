@@ -494,20 +494,22 @@ const Canvas = () => {
     message.success('图表已成功组合！');
   }, [setNodes, message]);
 
-  // 删除节点
+  // 删除节点时，自动删除其所有子节点
   const handleDeleteNode = useCallback((nodeId) => {
     setNodes((nds) => {
       // 找到被删节点
       const nodeToDelete = nds.find(n => n.id === nodeId);
       if (nodeToDelete && nodeToDelete.data && nodeToDelete.data.isCombined) {
-        // 删除 parent 及所有 child
-        return nds.filter(n => n.id !== nodeId && n.parentNode !== nodeId);
+        // 删除 parent 及所有推荐节点
+        const recommendIds = nds.filter(n => n.id !== nodeId && n.id.startsWith('recommend-')).map(n => n.id);
+        return nds.filter(n => n.id !== nodeId && !recommendIds.includes(n.id));
       }
       // 普通节点只删自己
       return nds.filter((node) => node.id !== nodeId);
     });
+    setEdges((eds) => eds.filter(e => e.source !== nodeId && e.target !== nodeId));
     message.success('图表已删除！');
-  }, [setNodes, message]);
+  }, [setNodes, setEdges, message]);
 
   // 编辑节点
   const handleEditNode = useCallback((nodeId) => {
@@ -652,7 +654,14 @@ const Canvas = () => {
 
   // 处理连接
   const onConnect = useCallback(
-    (params) => setEdges((eds) => addEdge(params, eds)),
+    (params) => {
+      console.log('[onConnect] 新增连线:', params);
+      setEdges((eds) => {
+        const newEdges = addEdge(params, eds);
+        console.log('[setEdges] 当前所有edges:', newEdges);
+        return newEdges;
+      });
+    },
     [setEdges]
   );
 
@@ -685,21 +694,8 @@ const Canvas = () => {
         position: 'relative',
       }}
     >
-      {/* 自定义 SVG 连线，应用 transform */}
-      {customLine && (
-        <svg
-          style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10 }}
-          width="100%" height="100%"
-          transform={`translate(${rfTransform.x ?? 0},${rfTransform.y ?? 0}) scale(${rfTransform.zoom ?? 1})`}
-        >
-          <line x1={customLine.x1} y1={customLine.y1} x2={customLine.x2} y2={customLine.y2} stroke="#1890ff" strokeWidth={2} markerEnd="url(#arrowhead)" />
-          <defs>
-            <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth">
-              <path d="M0,0 L8,4 L0,8" fill="#1890ff" />
-            </marker>
-          </defs>
-        </svg>
-      )}
+      {/* 让SVG连线依赖nodes和rfTransform，每次画布移动/缩放都刷新SVG，放到ReactFlow内部 */}
+      {/* 移除自定义SVG连线组件相关内容 */}
       <ReactFlow
         nodes={nodesWithUpdateSize}
         edges={edges}
@@ -721,119 +717,132 @@ const Canvas = () => {
           // 可选：拖拽过程中实时检测碰撞并高亮（如需视觉反馈可补充）
         }}
         onNodeDragStop={(event, node) => {
+          // 只对普通节点（!isCombined && !parentNode）做组合检测
+          if (node.data.isCombined || node.parentNode) return;
           for (const targetNode of nodes) {
-            if (targetNode.id !== node.id) {
-              if (detectCollision(node, targetNode)) {
-                // 移除自定义 SVG 连线渲染
-                if (!node.data.isCombined && !targetNode.data.isCombined) {
-                  // 1. 生成唯一 id
-                  const combinedNodeId = `combined-${Date.now()}-${Math.random()}`;
+            if (
+              targetNode.id !== node.id &&
+              !targetNode.data.isCombined &&
+              !targetNode.parentNode &&
+              detectCollision(node, targetNode)
+            ) {
+              // 组合逻辑（原有代码）
+              const combinedNodeId = `combined-${Date.now()}-${Math.random()}`;
+              const combinedNodeWidth = 300;
+              const sourceChart = {
+                title: node.data.title || '源图表',
+                option: node.data.chartOptions || node.data.chartData || {},
+                chartType: node.data.chartType || node.data.chart
+              };
+              const targetChart = {
+                title: targetNode.data.title || '目标图表',
+                option: targetNode.data.chartOptions || targetNode.data.chartData || {},
+                chartType: targetNode.data.chartType || targetNode.data.chart
+              };
+              // 组合节点位置=targetNode.position
+              const combinedNode = {
+                id: combinedNodeId,
+                type: 'chartNode',
+                position: { ...targetNode.position },
+                width: combinedNodeWidth,
+                height: 260,
+                style: { zIndex: 1 },
+                data: {
+                  title: '组合图表',
+                  isCombined: true,
+                  combinedCharts: [sourceChart, targetChart],
+                  width: combinedNodeWidth,
+                  height: 260,
+                  onDelete: handleDeleteNode,
+                  onEdit: handleEditNode,
+                },
+              };
+              // 推荐节点和edge
+              const recommendNodes = [];
+              const newEdges = [];
+              let yOffset = 0;
+              for (const rule of rules) {
+                const match = findMatchingRule([rule], node.data.genes || {}, targetNode.data.genes || {});
+                if (match) {
+                  const newGenes = match.genes;
+                  const newOption = genesToOption(
+                    match.chart,
+                    newGenes,
+                    mockDataGenerator(match.chart, newGenes)
+                  );
                   const recommendNodeId = `recommend-${Date.now()}-${Math.random()}`;
-                  const combinedNodeWidth = 300;
-                  // 2. 生成组合节点（独立节点）
-                  const sourceChart = {
-                    title: node.data.title || '源图表',
-                    option: node.data.chartOptions || node.data.chartData || {},
-                    chartType: node.data.chartType || node.data.chart
-                  };
-                  const targetChart = {
-                    title: targetNode.data.title || '目标图表',
-                    option: targetNode.data.chartOptions || targetNode.data.chartData || {},
-                    chartType: targetNode.data.chartType || targetNode.data.chart
-                  };
-                  const combinedNode = {
-                    id: combinedNodeId,
+                  recommendNodes.push({
+                    id: recommendNodeId,
                     type: 'chartNode',
-                    position: { x: 100, y: 100 },
-                    width: combinedNodeWidth,
-                    height: 260,
-                    style: { zIndex: 1 },
+                    // 推荐节点绝对定位在组合节点右侧
+                    position: {
+                      x: targetNode.position.x + combinedNodeWidth + 40,
+                      y: targetNode.position.y + yOffset
+                    },
+                    width: 250,
+                    height: 200,
+                    style: { zIndex: 2 },
                     data: {
-                      title: '组合图表',
-                      isCombined: true,
-                      combinedCharts: [sourceChart, targetChart],
-                      width: combinedNodeWidth,
-                      height: 260,
+                      title: match.chart,
+                      chart: match.chart,
+                      chartType: match.chart,
+                      chartOptions: newOption,
+                      genes: newGenes,
+                      explanation: match.explanation,
+                      width: 250,
+                      height: 200,
                       onDelete: handleDeleteNode,
                       onEdit: handleEditNode,
                     },
-                  };
-                  // 3. 生成推荐节点（独立节点，绝对定位）
-                  const rule = findMatchingRule(
-                    rules,
-                    node.data.genes || {},
-                    targetNode.data.genes || {}
-                  );
-                  let recommendNode;
-                  if (rule) {
-                    const newGenes = rule.then.genes;
-                    const newOption = genesToOption(
-                      rule.then.chart,
-                      newGenes,
-                      mockDataGenerator(rule.then.chart, newGenes)
-                    );
-                    recommendNode = {
-                      id: recommendNodeId,
-                      type: 'chartNode',
-                      position: { x: 600, y: 100 },
-                      width: 250,
-                      height: 200,
-                      style: { zIndex: 2 },
-                      data: {
-                        title: rule.then.chart,
-                        chart: rule.then.chart,
-                        chartType: rule.then.chart,
-                        chartOptions: newOption,
-                        genes: newGenes,
-                        explanation: rule.then.explanation,
-                        width: 250,
-                        height: 200,
-                        onDelete: handleDeleteNode,
-                        onEdit: handleEditNode,
-                      },
-                    };
-                  } else {
-                    recommendNode = {
-                      id: recommendNodeId,
-                      type: 'chartNode',
-                      position: { x: 600, y: 100 },
-                      width: 250,
-                      height: 120,
-                      style: { zIndex: 2 },
-                      data: {
-                        title: '未找到合适的图表组合',
-                        chart: '',
-                        chartType: '',
-                        chartOptions: {},
-                        genes: {},
-                        explanation: '',
-                        width: 250,
-                        height: 120,
-                        onDelete: handleDeleteNode,
-                        onEdit: handleEditNode,
-                        isNoRecommend: true,
-                      },
-                    };
-                  }
-                  // 4. 添加原生 edge
-                  const newEdge = {
+                  });
+                  newEdges.push({
                     id: `edge-${combinedNodeId}-${recommendNodeId}`,
                     source: combinedNodeId,
                     target: recommendNodeId,
                     type: 'straight',
-                  };
-                  // 5. 更新 nodes 和 edges
-                  setNodes((nds) => {
-                    const filtered = nds.filter(n => n.id !== node.id && n.id !== targetNode.id);
-                    return [...filtered, combinedNode, recommendNode];
                   });
-                  setEdges((eds) => [...eds, newEdge]);
-                  return;
-                } else {
-                combineCharts(node, targetNode);
-                  return;
+                  yOffset += 220;
                 }
               }
+              if (recommendNodes.length === 0) {
+                const recommendNodeId = `recommend-${Date.now()}-${Math.random()}`;
+                recommendNodes.push({
+                  id: recommendNodeId,
+                  type: 'chartNode',
+                  position: {
+                    x: targetNode.position.x + combinedNodeWidth + 40,
+                    y: targetNode.position.y + yOffset
+                  },
+                  width: 250,
+                  height: 120,
+                  style: { zIndex: 2 },
+                  data: {
+                    title: '未找到合适的图表组合',
+                    chart: '',
+                    chartType: '',
+                    chartOptions: {},
+                    genes: {},
+                    explanation: '',
+                    width: 250,
+                    height: 120,
+                    onDelete: handleDeleteNode,
+                    onEdit: handleEditNode,
+                    isNoRecommend: true,
+                  },
+                });
+                newEdges.push({
+                  id: `edge-${combinedNodeId}-${recommendNodeId}`,
+                  source: combinedNodeId,
+                  target: recommendNodeId,
+                  type: 'straight',
+                });
+              }
+              setNodes((nds) => {
+                const filtered = nds.filter(n => n.id !== node.id && n.id !== targetNode.id);
+                return [...filtered, combinedNode, ...recommendNodes];
+              });
+              setEdges((eds) => [...eds, ...newEdges]);
+              return;
             }
           }
         }}
@@ -842,7 +851,10 @@ const Canvas = () => {
             setRfTransform({ x: transform[0], y: transform[1], zoom: transform[2] });
           }
         }}
-        onInit={instance => { reactFlowInstanceRef.current = instance; }}
+        onInit={instance => {
+          reactFlowInstanceRef.current = instance;
+          console.log('[ReactFlow] edges 初始化:', edges);
+        }}
       >
         <Controls />
         <Background color="#aaa" gap={16} />
@@ -914,5 +926,7 @@ const Canvas = () => {
     </div>
   );
 };
+
+// 移除自定义SVG连线组件相关内容
 
 export default Canvas; 

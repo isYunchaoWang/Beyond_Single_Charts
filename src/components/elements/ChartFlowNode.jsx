@@ -3,6 +3,7 @@ import { Card, Button } from 'antd';
 import { DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import ReactECharts from 'echarts-for-react';
 import { NodeResizer } from '@reactflow/node-resizer';
+import { Handle, Position } from 'reactflow';
 
 const chartNameMap = {
   bar: '柱状图',
@@ -29,7 +30,10 @@ const ChartFlowNode = ({ id, data, width, height, selected }) => {
 
   if (data.isNoRecommend) {
     return (
-      <div ref={nodeRef} style={{ width, height, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px dashed #bbb', borderRadius: 8 }}>
+      <div ref={nodeRef} style={{ width, height, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px dashed #bbb', borderRadius: 8, position: 'relative' }}>
+        {/* 连接点 */}
+        <Handle type="source" position={Position.Right} />
+        <Handle type="target" position={Position.Left} />
         <span style={{ color: '#999', fontSize: 14 }}>未找到合适的图表组合</span>
       </div>
     );
@@ -39,6 +43,9 @@ const ChartFlowNode = ({ id, data, width, height, selected }) => {
   if (data.isCombined && data.combinedCharts) {
     return (
       <div ref={nodeRef} style={{ width, height, position: 'relative', background: '#fff', minHeight: 0 }}>
+        {/* 连接点 */}
+        <Handle type="source" position={Position.Right} />
+        <Handle type="target" position={Position.Left} />
         <NodeResizer color="#1890ff" isVisible={selected} minWidth={200} minHeight={120} />
         <Card
           size="small"
@@ -77,6 +84,9 @@ const ChartFlowNode = ({ id, data, width, height, selected }) => {
   // 单个图表节点
   return (
     <div ref={nodeRef} style={{ width, height, position: 'relative', background: '#fff', minHeight: 0 }}>
+      {/* 连接点 */}
+      <Handle type="source" position={Position.Right} />
+      <Handle type="target" position={Position.Left} />
       <NodeResizer color="#1890ff" isVisible={selected} minWidth={150} minHeight={120} />
       <Card
         size="small"
